@@ -400,10 +400,16 @@ footer a:hover { color: #009f06; }
 .project .thumbnail a span p { color: #e8e8e8; }
 .project .thumbnail a:hover span { display: block; }
 
-.profile img { box-shadow: 0 0 5px #828282; width: 100%; border: 1px solid #ddd; border-radius: 4px; padding: 5px; }
+.profile img { width: 100%; border-radius: 4px; }
 
-.profilepic { padding-right: 20px; }
+.profilepic { padding-right: 10px; width: 28%; box-sizing: border-box; display: inline-block; vertical-align: top; }
+.profilepic img { box-shadow: 0 0 2px #828282; width: 100%; }
 
+.profilecontent { width: 70%; display: inline-block; box-sizing: border-box; }
+
+@media (max-width: 42rem) { .profilepic { padding-bottom: 10px; width: 100%; display: inline-block; vertical-align: top; }
+  .profilepic img { display: block; width: 45%; margin: auto; }
+  .profilecontent { width: 100%; display: inline-block; } }
 .address { font-family: monospace; }
 .address p { margin: 0; }
 
