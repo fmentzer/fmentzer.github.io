@@ -449,8 +449,10 @@ h2 { // color: $theme-color; // border-bottom: 1px solid $theme-color; // border
 
 .bibliography { margin-bottom: 50px; margin-top: 20px; list-style-type: none; }
 .bibliography li { margin: 10px 0; position: relative; }
-.bibliography li span { display: block; }
 .bibliography li .title { font-weight: bolder; }
+.bibliography li .special { font-weight: bold; font-style: italic; font-variant: small-caps; padding-right: 0.75ex; color: #55a60b; white-space: nowrap; }
+.bibliography li .periodical { display: block; }
+.bibliography li .author { display: block; }
 .bibliography li .author a { border-bottom: 1px dashed #913256; }
 .bibliography li .author a:hover { border-bottom-style: solid; text-decoration: none; }
 .bibliography li .author > em { font-style: normal; font-weight: 700; }
