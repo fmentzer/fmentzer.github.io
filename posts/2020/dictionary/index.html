@@ -219,7 +219,7 @@ of the <code class="language-plaintext highlighter-rouge">struct</code> library.
 to reverse engineer it myself.</p>
 
 <p>The first simple
-thing to try was to just attempt to find a ZIP file by going throw the
+thing to try was to just attempt to find a ZIP file by going through the
 bytes of the file one by one. After all,
 it was very plausible that the file starts with some Apple
 header followed by some compressed data.</p>
@@ -420,21 +420,23 @@ that are actually found in the dictionary.
 As a first step, I used the Python Natural Language Toolkit,
 <a href="https://www.nltk.org">nltk</a>, to tokenize and lemmatize the words in the input text. 
 To tokenize, I used <code class="language-plaintext highlighter-rouge">tokenize.word_tokenize</code>,
-which means splitting the text into single words, turning),
+which means splitting the text into single words, 
 and removing words from punctuation, so, for example, turning <code class="language-plaintext highlighter-rouge">"Nice door", he said.</code>
 into <code class="language-plaintext highlighter-rouge">['"', 'Nice', 'door', '"', ',', 'he', 'said']</code>. Since that did not 
 remove all punctuation in my example text, I added some manual pruning.
 The resulting list of words was then lemmatized with <code class="language-plaintext highlighter-rouge">WoirdNetLeammanizer</code>,
 which turns, for example, <code class="language-plaintext highlighter-rouge">houses</code> into <code class="language-plaintext highlighter-rouge">house</code>.
-The full preprocessing code can be found in <a href="https://github.com/fab-jul/parse_dictionaries/blob/main/extract.py">extract.py</a>).</p>
+The full preprocessing code can be found in <a href="https://github.com/fab-jul/parse_dictionaries/blob/main/extract.py">extract.py</a>.</p>
 
 <p>I did this hoping to be able to find all terms of the text in the
 dictionary, but exploring the output, a significant number of terms in the
 input text was not found in the dictionary. For example, the noun <code class="language-plaintext highlighter-rouge">vitals</code> was not found,
 as it hides in the definition of the adjective <code class="language-plaintext highlighter-rouge">vital</code>, and <code class="language-plaintext highlighter-rouge">vitals</code> is not 
 lemmatized during preprocessing as the only valid base form is the noun <code class="language-plaintext highlighter-rouge">vitals</code>.
-I thus went on to parse some of the XML with a few xpaths. I noticed that a lot of definitions
-contain bold face words that are terms. Mostly, these are plurals or phrasal verbs (the
+I thus went on to parse some of the XML with a few xpaths. I noticed that
+ a lot of definitions
+contain bold face words that are also terms. 
+Mostly, these are plurals or phrasal verbs (the
 definition of <code class="language-plaintext highlighter-rouge">act</code> contains <code class="language-plaintext highlighter-rouge">act on</code>, <code class="language-plaintext highlighter-rouge">act for</code>, etc.),
 but this helped find some words. Additionally, I parsed everything under “Derivatives”,
 which uncovers a lot of additional terms. In particular, adverbs are usually
@@ -462,6 +464,14 @@ it can even contain CSS, as long as the CSS is inlined in the HTML as a
 </code></pre></div></div>
 
 <p><img class="col three" src="/assets/img/dictionary_watch.jpg" /></p>
+
+<h3 id="conclusion">Conclusion</h3>
+
+<p>This was a fun little exercise in reverse engineering. I’m not sure I would
+have gone through this this had I not found the gist and seen <code class="language-plaintext highlighter-rouge">import zlib</code>,
+as before that, the file looked very daunting. However, seeing that import
+statement gave the necessary energy to just push a bit further,
+and the rest was mostly a breeze.</p>
 
   </article>
 
