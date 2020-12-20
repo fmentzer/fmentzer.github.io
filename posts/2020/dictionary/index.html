@@ -98,17 +98,18 @@
 
   <article class="post-content">
     <p>For a while now I have wanted to write a simple dictionary app for the Apple
-Watch. The goal was to be able to lookup words from paper books fast, by storing
-the book on the watch, and doing fuzzy matches against the text.
+Watch. The goal was to be able to quickly look up words from paper books,
+by storing the book on the watch to be able to do fuzzy matches against the text.
 While Apple ships amazing dictionaries with macOS and iOS, they only provide a very
 limited API.
 On iOS, all you get is 
 a <em>view</em> into the dictionary via <code class="language-plaintext highlighter-rouge">UIReferenceLibraryViewController</code>,
 for the Watch, there is no API at all,
 and on OS X you get an antique <code class="language-plaintext highlighter-rouge">DCSCopyTextDefinition</code> that only
-returns a plain-text definition, which is not nice to display (the whole
-definition is returned as one blob of non-rich text, no newlines). 
-It was while attempting to parse this output that I realized it would be so much
+returns a plain-text definition, which is not nice to display. The whole
+definition is returned as one blob of non-rich text, no newlines.</p>
+
+<p>It was while attempting to parse this output that I realized it would be so much
 easier to get the source, which I’m showing here how to do.
 I open-sourced this <a href="https://github.com/fab-jul/parse_dictionaries">on github</a>.</p>
 
@@ -118,7 +119,7 @@ I open-sourced this <a href="https://github.com/fab-jul/parse_dictionaries">on g
 
 <p>And here is what I managed to extract:</p>
 
-<p><img class="col three" src="/assets/img/dictionary_myoutput.png" /></p>
+<p><img class="col three" src="/assets/img/dictionary_watch.jpg" /></p>
 
 <p>(I want to mention that this apparently has been done before, 
 and there is a <a href="https://gist.github.com/josephg/5e134adf70760ee7e49d">gist</a>
@@ -422,37 +423,164 @@ yields again a ~24MB file.</p>
 <p>What do we do with this? Well, it’s XML, which seems to be made mostly of HTML tags.
 In the <code class="language-plaintext highlighter-rouge">Resources</code> folder, there is also <code class="language-plaintext highlighter-rouge">DefaultStyle.css</code>. Indeed,
 wrapping the XML in some HTML boiler plate, including the style, and opening
-the resulting file in Chrome yielded the nice view we get above.</p>
+the resulting file in Chrome yielded the following nice view:</p>
+
+<p><img class="col three" src="/assets/img/dictionary_myoutput.png" /></p>
 
 <h3 id="parsing-some-of-the-xml">Parsing some of the XML</h3>
 
 <p>To actually use the parsed XML in a dictionary app for books, some further preprocessing
 has to be done, to turn the input text into a list of definitions
-that are actually found in the dictionary.
-As a first step, I used the Python Natural Language Toolkit,
-<a href="https://www.nltk.org">nltk</a>, to tokenize and lemmatize the words in the input text. 
-To tokenize, I used <code class="language-plaintext highlighter-rouge">tokenize.word_tokenize</code>,
-which means splitting the text into single words, 
-and removing words from punctuation, so, for example, turning <code class="language-plaintext highlighter-rouge">"Nice door", he said.</code>
-into <code class="language-plaintext highlighter-rouge">['"', 'Nice', 'door', '"', ',', 'he', 'said']</code>. Since that did not 
-remove all punctuation in my example text, I added some manual pruning.
-The resulting list of words was then lemmatized with <code class="language-plaintext highlighter-rouge">WoirdNetLeammanizer</code>,
-which turns, for example, <code class="language-plaintext highlighter-rouge">houses</code> into <code class="language-plaintext highlighter-rouge">house</code>.
+that are actually found in the dictionary.</p>
+
+<p>As a first step, I want to tokenize the text, i.e., split the text into words.
+For example, I want to turn 
+<code class="language-plaintext highlighter-rouge">"Nice doors", he said</code> into an array <code class="language-plaintext highlighter-rouge">[Nice, door, he, said]</code>. For this,
+I used the Python Natural Language Toolkit, <a href="https://www.nltk.org">nltk</a>,
+in particular it’s <code class="language-plaintext highlighter-rouge">word_toeknize</code> function:</p>
+
+<pre><code class="language-jupyterpython">&gt;&gt;&gt; from nltk import tokenize
+&gt;&gt;&gt; text = '"Nice door", he said.'
+&gt;&gt;&gt; tokenize.word_tokenize(text)
+['``', 'Nice', 'door', '"', ',', 'he', 'said']
+</code></pre>
+
+<p>It appeared that this does keep some punctuation in the words, so I did
+some manual postprocessing:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">words</span> <span class="o">=</span> <span class="n">tokenize</span><span class="o">.</span><span class="n">word_tokenize</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+<span class="c1"># Remove punctuation in tokens, as ntlk tokenizes for example "they'll" as
+# [they, 'll]. The resulting "ll" will be ditched in a later stage.
+# Also removes tokens that are just quotes, which turn into empty tokens,
+# removed at the MIN_WORD_LEN stage below.
+</span><span class="n">words</span> <span class="o">=</span> <span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">"'.-`</span><span class="se">\"</span><span class="s">"</span><span class="p">)</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">words</span><span class="p">)</span>
+<span class="c1"># Ditches some genitives and third person singulars. In Python 3.9 this
+# should be `removesuffix` but the `replace` works well enough in this context.
+</span><span class="n">words</span> <span class="o">=</span> <span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">"'s"</span><span class="p">,</span> <span class="s">''</span><span class="p">)</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">words</span><span class="p">)</span>
+<span class="c1"># Removes abbreviations such as "e.g."
+</span><span class="n">words</span> <span class="o">=</span> <span class="p">(</span><span class="n">w</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">words</span> <span class="k">if</span> <span class="s">'.'</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">w</span><span class="p">)</span>
+<span class="c1"># Removes most punctuation from the list, such as ",", ":", etc.,
+# also removes empty tokens.
+</span><span class="n">MIN_WORD_LEN</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">words</span> <span class="o">=</span> <span class="p">(</span><span class="n">w</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">words</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">w</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">MIN_WORD_LEN</span><span class="p">)</span>
+<span class="c1"># Removes all numbers
+</span><span class="n">words</span> <span class="o">=</span> <span class="p">(</span><span class="n">w</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">words</span> <span class="k">if</span> <span class="n">w</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">isdigit</span><span class="p">()</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">w</span><span class="p">))</span>
+</code></pre></div></div>
+
+<p>The resulting list of words was then lemmatized with <code class="language-plaintext highlighter-rouge">WordNetLeammanizer</code>,
+which turns, for example, <code class="language-plaintext highlighter-rouge">houses</code> into <code class="language-plaintext highlighter-rouge">house</code>. The lemmanizer
+requires the caller to specify whether the word is an adjective, adverb, verb
+or noun. Depending on this type, a word might be lemmanized differently.
+I decided to just try all types for all words, and keep the lemmanized forms
+if they are in the dictionary:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># First turn our list of words into a dictionary mapping words to how
+# often they appear.
+</span><span class="n">word_counts</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">Counter</span><span class="p">(</span><span class="n">words</span><span class="p">)</span>
+
+<span class="n">word_dict</span> <span class="o">=</span> <span class="o">...</span>  <span class="c1"># New Oxford American Dictionary as parsed above.
+</span><span class="n">lemma</span> <span class="o">=</span> <span class="n">WordNetLemmatizer</span><span class="p">()</span>
+<span class="n">word_counts_lemmad</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">w</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">word_counts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+  <span class="c1"># The possible lemmanized forms of the word `w`.
+</span>  <span class="n">possible_words</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+  <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">wordnet</span><span class="o">.</span><span class="n">POS_LIST</span><span class="p">:</span>  <span class="c1"># where POS_LIST == [ADJ, ADV, VERB, NOUN]
+</span>    <span class="n">w_lemmad</span> <span class="o">=</span> <span class="n">lemma</span><span class="o">.</span><span class="n">lemmatize</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">pos</span><span class="o">=</span><span class="n">t</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">w_lemmad</span> <span class="o">!=</span> <span class="n">w</span><span class="p">:</span>
+      <span class="n">possible_words</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">w_lemmad</span><span class="p">)</span>
+  <span class="k">if</span> <span class="ow">not</span> <span class="n">possible_words</span><span class="p">:</span>  <span class="c1"># No lemmanized form found, assume word itself.
+</span>    <span class="n">possible_words</span> <span class="o">=</span> <span class="p">{</span><span class="n">w</span><span class="p">}</span>
+  <span class="k">for</span> <span class="n">possible_w</span> <span class="ow">in</span> <span class="n">possible_words</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">possible_w</span> <span class="ow">in</span> <span class="n">word_dict</span><span class="p">:</span>
+      <span class="n">word_counts_lemmad</span><span class="p">[</span><span class="n">possible_w</span><span class="p">]</span> <span class="o">+=</span> <span class="n">count</span>
+</code></pre></div></div>
+
+<p>I assume that there are better ways to process the text, and nltk seems
+to have many more powerful functions, but the above code worked reasonably
+well for my purpose.
 The full preprocessing code can be found in <a href="https://github.com/fab-jul/parse_dictionaries/blob/main/extract.py">extract.py</a>.</p>
 
-<p>I did this hoping to be able to find all terms of the text in the
-dictionary, but exploring the output, a significant number of terms in the
-input text was not found in the dictionary. For example, the noun <code class="language-plaintext highlighter-rouge">vitals</code> was not found,
+<p>Exploring the output, I realized a significant number of terms in the
+input text was not found in the dictionary. 
+For example, the noun <code class="language-plaintext highlighter-rouge">vitals</code> was not found in the dictionary,
 as it hides in the definition of the adjective <code class="language-plaintext highlighter-rouge">vital</code>, and <code class="language-plaintext highlighter-rouge">vitals</code> is not 
 lemmatized during preprocessing as the only valid base form is the noun <code class="language-plaintext highlighter-rouge">vitals</code>.
-I thus went on to parse some of the XML with a few xpaths. I noticed that
- a lot of definitions
-contain bold face words that are also terms. 
+Thus, the above pre-processing will skip <code class="language-plaintext highlighter-rouge">vitals</code>, as it’s not in the <code class="language-plaintext highlighter-rouge">word_dict</code>.
+Looking at the entry for the term <code class="language-plaintext highlighter-rouge">vital</code>, we see:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>vi·tal | ˈvīdlˈvaɪdl |
+adjective
+    1 absolutely necessary or important; essential : secrecy is of vital importance | it is vital that the system is regularly maintained .
+    • indispensable to the continuance of life : the vital organs .
+    2 full of energy; lively : a beautiful, vital girl .
+    3 archaic fatal : the wound is vital .
+noun ( vitals )
+    the body's important internal organs, especially the gut or the genitalia : he felt the familiar knot contract in his vitals .
+    • short for vital signs.
+</code></pre></div></div>
+
+<p>In the second definition, we find the term <code class="language-plaintext highlighter-rouge">vitals</code>. Looking at the XML,
+we see:</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"x_xdh"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;span</span> <span class="na">role=</span><span class="s">"text"</span> <span class="na">class=</span><span class="s">"posg"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;span</span> <span class="na">d:pos=</span><span class="s">"2"</span> <span class="na">class=</span><span class="s">"pos"</span><span class="nt">&gt;</span>
+      <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"gp tg_pos"</span><span class="nt">&gt;</span>noun <span class="nt">&lt;/span&gt;</span>
+      <span class="nt">&lt;d:pos/&gt;</span>
+    <span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"fg"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"gp tg_fg"</span><span class="nt">&gt;</span>(<span class="nt">&lt;/span&gt;</span>
+    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"f"</span><span class="nt">&gt;</span>vitals<span class="nt">&lt;/span&gt;</span>  <span class="c">&lt;!-- the desired term! --&gt;</span>
+    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"gp tg_fg"</span><span class="nt">&gt;</span>) <span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;/span&gt;</span>
+<span class="nt">&lt;/span&gt;</span>
+<span class="nt">&lt;span</span> <span class="na">id=</span><span class="s">"m_en_gbus1132680.014"</span> <span class="na">class=</span><span class="s">"msDict x_xd1 t_core"</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;span</span> <span class="na">d:def=</span><span class="s">"2"</span> <span class="na">role=</span><span class="s">"text"</span> <span class="na">class=</span><span class="s">"df"</span><span class="nt">&gt;</span>the body's important internal organs, especially the gut or the genitalia<span class="nt">&lt;d:def/&gt;&lt;/span&gt;</span>
+  <span class="nt">&lt;span</span> <span class="na">role=</span><span class="s">"text"</span> <span class="na">class=</span><span class="s">"gp tg_df"</span><span class="nt">&gt;</span>: <span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;span</span> <span class="na">role=</span><span class="s">"text"</span> <span class="na">class=</span><span class="s">"eg"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"ex"</span><span class="nt">&gt;</span> he felt the familiar knot contract in his vitals<span class="nt">&lt;/span&gt;</span>
+    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">"gp tg_eg"</span><span class="nt">&gt;</span>. <span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;/span&gt;</span>
+  <span class="nt">&lt;span</span> <span class="na">role=</span><span class="s">"text"</span> <span class="na">class=</span><span class="s">"gp tg_msDict"</span><span class="nt">&gt;</span> <span class="nt">&lt;/span&gt;</span>
+<span class="nt">&lt;/span&gt;</span>
+</code></pre></div></div>
+
+<p>I created the following XPath to locate these terms</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">XPATH_OTHER_WORDS</span> <span class="o">=</span> <span class="s">'//span[@class="fg"]/span[@class="f"]'</span>
+</code></pre></div></div>
+
+<p>Trying the XPath on all definitions seemed to uncover a lot of additional terms.
 Mostly, these are plurals or phrasal verbs (the
 definition of <code class="language-plaintext highlighter-rouge">act</code> contains <code class="language-plaintext highlighter-rouge">act on</code>, <code class="language-plaintext highlighter-rouge">act for</code>, etc.),
-but this helped find some words. Additionally, I parsed everything under “Derivatives”,
-which uncovers a lot of additional terms. In particular, adverbs are usually
-defined as derivatives of adjectives.</p>
+but this helped find some words in my input text.</p>
+
+<p>On a side note, I learned during this project that Chrome has a really great
+way to test XPath queries (while writing I realized Safari actually also has this).
+Right Click -&gt; “Inspect”, CMD+F, note the search bar at the bottom
+of the window:</p>
+
+<p><img class="col three" src="/assets/img/xpath_chrome.png" /></p>
+
+<p>You can even select XML elements and Right Click -&gt; Copy -&gt; XPath to extract
+a somewhat verbose XPath.</p>
+
+<p>Going back to the definitions, I wrote a second XPath to get derivative 
+definitions. It turns out a lot of terms hide there, in particular adverbs, but also a 
+lot of derived nouns. An example entry with useful derivatives:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>snoop | sno͞op | informal
+verb [no object]
+    investigate or look around furtively [...]
+noun [in singular]
+    a furtive investigation [...]
+
+DERIVATIVES
+    snooper | ˈsno͞opər | noun
+    snoopy adjective
+</code></pre></div></div>
 
 <p>Overall, this allowed me to find most words in my input text. The 
 remaining terms were mostly names or book-specific jargon.</p>
@@ -460,12 +588,25 @@ remaining terms were mostly names or book-specific jargon.</p>
 <h3 id="getting-it-onto-the-apple-watch">Getting it onto the Apple Watch</h3>
 
 <p>I wanted to look at these entries on the Watch. Sadly, it turns out there
-is now <code class="language-plaintext highlighter-rouge">UIWebView</code> (used to render HTML in iOS) in WatchKit. But, 
+is no <code class="language-plaintext highlighter-rouge">UIWebView</code> (used to render HTML in iOS) in WatchKit. But, 
 <code class="language-plaintext highlighter-rouge">NSAttributedString</code> can be constructed from a HTML string. As it turns out,
 it can even contain CSS, as long as the CSS is inlined in the HTML as a
 <code class="language-plaintext highlighter-rouge">&lt;style&gt;</code> element in the header.</p>
 
-<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">let</span> <span class="nv">definition</span><span class="p">:</span> <span class="kt">String</span> <span class="o">=</span> <span class="o">...</span> <span class="c1">// The XML</span>
+<div class="language-swift highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">let</span> <span class="nv">HTML_ENTRY_START</span> <span class="o">=</span> <span class="s">"""
+ &lt;html lang="</span><span class="n">en</span><span class="s">"&gt;
+ &lt;head&gt;
+   &lt;meta charset="</span><span class="n">utf</span><span class="o">-</span><span class="mi">8</span><span class="s">"&gt;
+   &lt;title&gt;Words&lt;/title&gt;
+   &lt;style&gt;
+      ... Full DefaultStyle.css file here ...
+   &lt;/style&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+"""</span>
+<span class="k">let</span> <span class="nv">HTML_ENTRY_END</span> <span class="o">=</span> <span class="s">"&lt;/body&gt;"</span>
+
+<span class="k">let</span> <span class="nv">definition</span><span class="p">:</span> <span class="kt">String</span> <span class="o">=</span> <span class="o">...</span> <span class="c1">// The XML</span>
 <span class="k">let</span> <span class="nv">htmlDefinition</span> <span class="o">=</span> <span class="kt">HTML_ENTRY_START</span> <span class="o">+</span> <span class="n">definition</span> <span class="o">+</span> <span class="kt">HTML_ENTRY_END</span>
 <span class="k">let</span> <span class="nv">data</span> <span class="o">=</span> <span class="n">htmlDefinition</span><span class="o">.</span><span class="nf">data</span><span class="p">(</span><span class="nv">using</span><span class="p">:</span> <span class="o">.</span><span class="n">utf8</span><span class="p">)</span><span class="o">!</span>
 <span class="k">let</span> <span class="nv">attributedDefinition</span> <span class="o">=</span> <span class="k">try</span> <span class="kt">NSAttributedString</span><span class="p">(</span>
@@ -475,12 +616,10 @@ it can even contain CSS, as long as the CSS is inlined in the HTML as a
 <span class="n">outputLabel</span><span class="o">.</span><span class="nf">setAttributedText</span><span class="p">(</span><span class="n">attributedDefinition</span><span class="p">)</span>
 </code></pre></div></div>
 
-<p><img class="col three" src="/assets/img/dictionary_watch.jpg" /></p>
-
 <h3 id="conclusion">Conclusion</h3>
 
 <p>This was a fun little exercise in reverse engineering. I’m not sure I would
-have gone through this this had I not found the gist and seen <code class="language-plaintext highlighter-rouge">import zlib</code>,
+have gone through this had I not found the gist and seen <code class="language-plaintext highlighter-rouge">import zlib</code>,
 as before that, the file looked very daunting. However, seeing that import
 statement gave the necessary energy to just push a bit further,
 and the rest was mostly a breeze.</p>
