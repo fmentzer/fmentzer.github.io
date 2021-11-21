@@ -1,0 +1,324 @@
+<p>For a while now I have wanted to write a simple dictionary app for the Apple Watch. The goal was to be able to quickly look up words from paper books, by storing the book on the watch to be able to do fuzzy matches against the text. While Apple ships amazing dictionaries with macOS and iOS, they only provide a very limited API. On iOS, all you get is a <em>view</em> into the dictionary via <code>UIReferenceLibraryViewController</code>, for the Watch, there is no API at all, and on OS X you get an antique <code>DCSCopyTextDefinition</code> that only returns a plain-text definition, which is not nice to display. The whole definition is returned as one blob of non-rich text, no newlines.</p>
+<p>It was while attempting to parse this output that I realized it would be so much easier to get the source, which I’m showing here how to do. I open-sourced the code to parse the dictionary <a href="https://github.com/fab-jul/parse_dictionaries">on github</a>.</p>
+<p>Here is a pic of the OS X dictionary:</p>
+<p><img class="col three" src="{{ site.baseurl }}/assets/img/dictionary.png"></p>
+<p>And here is what I managed to extract:</p>
+<p><img class="col three" src="{{ site.baseurl }}/assets/img/dictionary_watch.jpg"></p>
+<p>I started by trying to figure out where dictionaries are stored. Some googling <a href="https://discussions.apple.com/thread/250861549?answerId=251679363022#251679363022">revealed</a> that they are burried in <code>/System</code> (at least for macOS 10.15 and possibly higher), at</p>
+<pre><code>/System/Library/AssetsV2/
+  com_apple_MobileAsset_DictionaryServices_dictionaryOSX/</code></pre>
+<p>This folder contains various cryptically-named folders ending in <code>.asset</code>, which represent the different installed dictionaries. E.g., for me:</p>
+<pre><code>$ ls
+24effbf40402f823bb9d9f6f12b75af3e679a4a6.asset
+26e585a43423edb02b25fa7ba9af3fdc08eed6d7.asset
+4094df88727a054b658681dfb74f23702d3c985e.asset
+96d637557afb292134db05d7d7f30c0fed9cef9f.asset
+976258f0b1fad70dd8e7ee7c1b4be8f8536e19a7.asset
+a1d5710e8c3932361413f22ff588a1a3c7c337bf.asset
+com_apple_MobileAsset_DictionaryServices_dictionaryOSX.xml</code></pre>
+<p>Of these, <code>4094df88727a054b658681dfb74f23702d3c985e.asset</code> is the “New Oxford American Dictionary”. Going into that folder and a few levels deeper, we land at a promisingly named “Resources” folder:</p>
+<pre><code>$ ls /System/Library/AssetsV2/
+  com_apple_MobileAsset_DictionaryServices_dictionaryOSX/
+  4094df88727a054b658681dfb74f23702d3c985e.asset/
+  AssetData/
+  New Oxford American Dictionary.dictionary/
+  Contents/
+  Resources/
+
+Body.data        ca.lproj         ms.lproj
+DefaultStyle.css cs.lproj         no.lproj
+Dutch.lproj      da.lproj         pl.lproj
+English.lproj    el.lproj         pt.lproj
+EntryID.data     en_AU.lproj      pt_PT.lproj
+EntryID.index    en_GB.lproj      ro.lproj
+French.lproj     es_419.lproj     ru.lproj
+German.lproj     fbm.css          sk.lproj
+Images           fi.lproj         sv.lproj
+Italian.lproj    fr_CA.lproj      th.lproj
+Japanese.lproj   he.lproj         tr.lproj
+KeyText.data     hi.lproj         uk.lproj
+KeyText.index    hr.lproj         vi.lproj
+NOAD.xsl         hu.lproj         zh_CN.lproj
+Spanish.lproj    id.lproj         zh_HK.lproj
+ar.lproj         ko.lproj         zh_TW.lproj</code></pre>
+<p>which is filled with a whole bunch of files. Sorting by size, it turns out that <code>Body.data</code> could be a promising candidate at 23MB.</p>
+<p>Sadly, it seems to be a binary blob without a discernible content.</p>
+<pre><code>$ xxd Body.data | head -n15
+00000000: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000010: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000020: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000030: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000040: f74d 7001 0000 0000 ffff ffff 2000 0000  .Mp......... ...
+00000050: 0000 0000 da02 0000 ffff ffff ffff ffff  ................
+00000060: 9480 0000 9080 0000 443b 0400 78da ecbd  ........D;..x...
+00000070: 6b8c 2457 961e 26ed 6ab5 6fc9 300c c382  k.$W..&amp;.j.o.0...
+00000080: 21e3 aac7 10ab b455 3df9 7eb0 67da aa6e  !......U=.~.g..n
+00000090: 72d8 3d7c 0cc5 2667 b05a 8c1b 3723 6e66  r.=|..&amp;g.Z..7#nf
+000000a0: 5c56 44dc e4bd 1155 9dc4 1a18 6261 9918  \VD....U....ba..
+000000b0: 717f 505c db4b 2cb4 c66a e911 966b 4382  q.P\.K,..j...kC.
+000000c0: b570 0bd6 2f75 f71a ae69 0c2c ff31 6003  .p../u...i.,.1`.
+000000d0: b6e1 010c 0102 2c03 fee3 1f86 1fe7 dc1b  ......,.........
+000000e0: 9195 8f88 cc8c c81b 9955 2407 c3ae aacc  .........U$.....</code></pre>
+<p>Scanning through the file with <code>xxd</code>, I did not find any visible structure.</p>
+<p>However, given that the file is only ~23MB, I was thinking it may just be a ZIP file in disguise.</p>
+<pre><code>unzip Body.data
+Archive:  Body.data
+  End-of-central-directory signature not found.  Either this file is not
+  a zipfile, or it constitutes one disk of a multi-part archive.  In the
+  latter case the central directory and zipfile comment will be found on
+  the last disk(s) of this archive.
+unzip:  cannot find zipfile directory in one of Body.data or
+        Body.data.zip, and cannot find Body.data.ZIP, period.</code></pre>
+<p>No luck! Same for <code>tar xvf</code>.</p>
+<p>At this moment, I remembered that the last time I had been thinking about this problem, years ago, I had stumpled upon some cryptic C code. I remembered fiddling around with XML, so I tried to dig up old projects, but sadly, I must have deleted them.</p>
+<p>Some googling later, I stumpled upon the very <a href="https://gist.github.com/josephg/5e134adf70760ee7e49d">gist</a> I had found years ago. It’s a very short and sweet python script to extract entries from <code>Data.entry</code>. However, it’s also somewhat magical in that it’s not documented, seeks random offsets, and even makes use of the <code>struct</code> library.</p>
+<p>But, it also does <code>import zlib</code>, so I thought, let’s try to reverse engineer it myself.</p>
+<p>The first simple thing to try was to just attempt to find a ZIP file by going through the bytes of the file one by one. After all, it was very plausible that the file starts with some Apple header followed by some compressed data.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> zlib</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> itertools</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>DATA_FILE_PATH <span class="op">=</span> ...</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(DATA_FILE_PATH, <span class="st">&#39;rb&#39;</span>) <span class="im">as</span> f:</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  content_bytes <span class="op">=</span> f.read()</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Try all offsets to see if we find a ZIP file</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> offset <span class="kw">in</span> itertools.count():</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>  <span class="bu">print</span>(<span class="ss">f&#39;Trying </span><span class="sc">{</span>offset<span class="sc">}</span><span class="ss">...&#39;</span>)</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>  <span class="cf">try</span>:</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    content_decompressed <span class="op">=</span> zlib.decompress(content_bytes[offset:])</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&#39;Found ZIP!&#39;</span>)</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">break</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>  <span class="cf">except</span> zlib.error:  <span class="co"># Current content_bytes is not a zipfile -&gt; skip a byte.</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">pass</span></span></code></pre></div>
+<p>… and, low and behold, at byte number 108, a ZIP file starts!</p>
+<pre><code>Trying 102...
+Trying 103...
+Trying 104...
+Trying 105...
+Trying 106...
+Trying 107...
+Trying 108...
+Found ZIP!</code></pre>
+<p>Very exciting! What’s in this ZIP?</p>
+<pre><code>&gt;&gt;&gt; content_decompressed.decode()
+UnicodeDecodeError: &#39;utf-8&#39; codec can&#39;t decode byte 0xa3 in position 0: invalid start byte</code></pre>
+<p>Ok, so already the first byte cannot be decoded by ‘utf-8’, that’s a bit sad.</p>
+<pre><code>&gt;&gt;&gt; print(content_decompressed[:20])
+b&#39;\xa3\x02\x00\x00&lt;d:entry xmlns:d&#39;</code></pre>
+<p>Aha, already a few bytes later, some XML starts. For now, let’s just ignore the first four bytes.</p>
+<pre><code>&gt;&gt;&gt; content_decompressed[4:].decode()
+UnicodeDecodeError: &#39;utf-8&#39; codec can&#39;t decode byte 0xe7 in position 2065: invalid continuation byte</code></pre>
+<p>That’s already more promising, we can decode 2065 bytes. Looking around position 2065, we find:</p>
+<pre><code>&gt;&gt;&gt; print(content_decompressed[2055:2085])
+b&#39;an&gt;&lt;/d:entry&gt;\n\xe7\x02\x00\x00&lt;d:entry xml&#39;
+#              ^ |              |
+#        newline |__ 4 bytes ___|</code></pre>
+<p>We see the entry ends, followed by a newline <code>\n</code>, some more seemingly random bytes, and another entry starts!</p>
+<p>For reference, here is the first entry (defining <code>007</code>, as it turns out):</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode xml"><code class="sourceCode xml"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>&lt;<span class="kw">d:entry</span><span class="ot"> xmlns:d=</span><span class="st">&quot;http://www.apple.com/DTDs/DictionaryService-1.0.rng&quot;</span> </span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ot">    id=</span><span class="st">&quot;m_en_gbus1179660&quot;</span> </span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="ot">    d:title=</span><span class="st">&quot;007&quot;</span> </span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="ot">    class=</span><span class="st">&quot;entry&quot;</span>&gt;</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  &lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;hg x_xh0&quot;</span>&gt;</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    &lt;<span class="kw">span</span><span class="ot"> role=</span><span class="st">&quot;text&quot;</span><span class="ot"> class=</span><span class="st">&quot;hw&quot;</span>&gt;007 &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>  &lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;sg&quot;</span>&gt;</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    &lt;<span class="kw">span</span><span class="ot"> id=</span><span class="st">&quot;m_en_gbus1179660.005&quot;</span><span class="ot"> class=</span><span class="st">&quot;se1 x_xd0&quot;</span>&gt;</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>      &lt;<span class="kw">span</span><span class="ot"> role=</span><span class="st">&quot;text&quot;</span><span class="ot"> class=</span><span class="st">&quot;posg x_xdh&quot;</span>&gt;</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>        &lt;<span class="kw">span</span><span class="ot"> d:pos=</span><span class="st">&quot;1&quot;</span><span class="ot"> class=</span><span class="st">&quot;pos&quot;</span>&gt;</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>          &lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;gp tg_pos&quot;</span>&gt;noun &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>          &lt;<span class="kw">d:pos</span>/&gt;</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>        &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>      &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>      &lt;<span class="kw">span</span><span class="ot"> id=</span><span class="st">&quot;m_en_gbus1179660.006&quot;</span><span class="ot"> class=</span><span class="st">&quot;msDict x_xd1 t_core&quot;</span>&gt;</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>        &lt;<span class="kw">span</span><span class="ot"> d:def=</span><span class="st">&quot;1&quot;</span><span class="ot"> role=</span><span class="st">&quot;text&quot;</span><span class="ot"> class=</span><span class="st">&quot;df&quot;</span>&gt;</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>            the fictional British secret agent James Bond, or someone based on,</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>            inspired by, or reminiscent of him&lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;gp tg_df&quot;</span>&gt;.&lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>            &lt;<span class="kw">d:def</span>/&gt;</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>        &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>      &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>    &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>  &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>&lt;/<span class="kw">d:entry</span>&gt;</span></code></pre></div>
+<p>Exploring some more, I did not find a pattern in these delimiter bytes except it always being 4 bytes. I’m assuming they somehow tell you how long the next entry is. But we can just always ignore the 4 bytes and keep reading until the next newline appears.</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> split(input_bytes):</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>  <span class="co"># The first four bytes are always not UTF-8.</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>  input_bytes <span class="op">=</span> input_bytes[<span class="dv">4</span>:]</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>  entries <span class="op">=</span> []</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>  <span class="cf">while</span> <span class="va">True</span>:</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Find the next newline, which delimits the current entry.</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">try</span>:</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>      next_offset <span class="op">=</span> input_bytes.index(<span class="st">&#39;</span><span class="ch">\n</span><span class="st">&#39;</span>.encode(<span class="st">&#39;utf-8&#39;</span>))</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">except</span> <span class="pp">ValueError</span>:  <span class="co"># No more new-lines -&gt; no more entries!</span></span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>      <span class="cf">break</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>    entry_text <span class="op">=</span> input_bytes[:next_offset].decode(<span class="st">&#39;utf-8&#39;</span>)</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    entries.append(entry_text)</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>    <span class="co"># There is always 4 bytes of gibberish between entries. Skip them</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>    <span class="co"># and the new lines (for a total of 5 bytes).</span></span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>    input_bytes <span class="op">=</span> input_bytes[next_offset <span class="op">+</span> <span class="dv">5</span>:]</span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> entries</span></code></pre></div>
+<p>Aaaand… that yielded a measly 152 entries. Very sad. Where is the rest? Let’s first see what entries we have:</p>
+<pre><code>007, 2.0, 404, 420, 4D printing, 4K, 911, 999, a, a, A, A, a-, a-, a-, a-, -a, 
+-a, -a, A1, A3, A4, A5, aa, AA, AAA, AAAS, Aachen, AAD, Aadhaar, Aalborg, Aalto, 
+Alvar, AAM, A &amp; M, A &amp; R, aardvark, aardwolf, aargh, Aarhus, Aaron, Aaron, Hank,
+Aaron&#39;s beard, Aaron&#39;s rod, AARP, AAU, AAUP, AAVE, abs, Ab, Ab, AB, AB, ab-, ABA,
+ abaca, aback, abacus, Abadan, Abaddon, abaft, Abakan, abalone, abandon, abandoned,
+abandonment, abandonware, abase, abasement, abash, abashed, abate, abatement, 
+abattoir, a battuta, abaxial, abaya, Abba, Abba, abbacy, Abbas, Ferhat, Abbas,
+Mahmoud, Abbasid, abbatial, abbé, abbess, Abbevillian, abbey, Abbey Road,
+abbot, Abbott, Berenice, Abbott, Sir John, Abbott, Tony, abbr., abbreviate,
+abbreviated, abbreviation, ABC, ABC, ABC, ABC Islands, ABD, abdicate,
+abdication, abdomen, abdominal, abdominoplasty, abdominous, abducens, abducens
+nerve, abduct, abductee, abduction, abductor, Abdul Hamid II, Abdul-Jabbar,
+Kareem, Abdullah ibn Hussein, Abdullah II, Abdul Rahman, Tunku, Abe, Shinzo,
+abeam, abecedarian, abed, abeer, Abel, Abel, Niels Henrik, Abelard, Peter,
+abele, abelian, Abenomics, Abeokuta, Aberdeen, Aberdeen Angus, Aberdonian,
+Abernathy, Ralph David, aberrant, aberration, Abertawe, abet, abettor,
+abeyance, abhor, abhorrence, abhorrent, abide, abiding, Abidjan, Abilene,
+ability, -ability, Abington, ab initio, abiogenesis</code></pre>
+<p>Clearly, we are doing something right, but we are just getting the very first entries.</p>
+<p>Going back to the first part, I realized that <code>content_decompressed</code> is actually very short compared to all available bytes: Decompressing yielded 277kB of data, while the whole <code>Body.data</code> file is 24MB.</p>
+<p>So, probably there more ZIP files. If so, how do we find them? Obviously, we cannot just skip 277kB and try searching again, as the compressed ZIP is smaller than 277kB. And blindly trying to do <code>zlib.decompress</code> at each possible offset takes forever (and is inelegant).</p>
+<p>However, reading the <a href="https://docs.python.org/3/library/zlib.html">the zlib documentation</a>, it turns out that there is also a slightly fancier API. We can get a “Decompress” instance using <code>zlib.decompressobj()</code>, call <code>decompress()</code> on that, and the instance will actually return <code>unused_data</code>. (<strong>Very cool!</strong>)</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> <span class="bu">open</span>(DATA_FILE_PATH, <span class="st">&#39;rb&#39;</span>) <span class="im">as</span> f:</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>  content_bytes <span class="op">=</span> f.read()</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="va">True</span>:</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>  <span class="cf">try</span>:</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>    decompressobj <span class="op">=</span> zlib.decompressobj()</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>    content_decompressed <span class="op">=</span> decompressobj.decompress(content_bytes)</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    entries <span class="op">=</span> split(content_decompressed)</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    <span class="co"># In the next loop step, we use the unused data to look for a ZIP file.</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    content_bytes <span class="op">=</span> decompressobj.unused_data</span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>  <span class="cf">except</span> zlib.error:  <span class="co"># Current content_bytes is not a zipfile -&gt; skip a byte.</span></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="st">&#39;Error, skipping a byte...&#39;</span>)</span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>    content_bytes <span class="op">=</span> content_bytes[<span class="dv">1</span>:]</span></code></pre></div>
+<p>And this works. Turns out there is only 12 bytes after the first ZIP file before the next one starts, and then this pattern repeats for the rest of the file.</p>
+<p>That’s (almost) all we need to parse the whole <code>Body.data</code>. The only (minor) problem was that the file ends with a bunch of meta information about the dictionary, which triggered some asserts in my code. But overall, with this, I was able to extract definitions for 103013 words! Putting them all in a python <code>dict</code> and <code>pickle</code>-ing this dict yields an impressive 200MB file. Zipping that file yields again a ~24MB file.</p>
+<p>What do we do with this? Well, it’s XML, which seems to be made mostly of HTML tags. In the <code>Resources</code> folder, there is also <code>DefaultStyle.css</code>. Indeed, wrapping the XML in some HTML boiler plate, including the style, and opening the resulting file in Chrome yielded the following nice view:</p>
+<p><img class="col three" src="{{ site.baseurl }}/assets/img/dictionary_myoutput.png"></p>
+<h3 id="parsing-some-of-the-xml">Parsing some of the XML</h3>
+<p>To actually use the parsed XML in a dictionary app for books, some further preprocessing has to be done, to turn the input text into a list of definitions that are actually found in the dictionary.</p>
+<p>As a first step, I want to tokenize the text, i.e., split the text into words. For example, I want to turn <code>"Nice doors", he said</code> into an array <code>[Nice, door, he, said]</code>. For this, I used the Python Natural Language Toolkit, <a href="https://www.nltk.org">nltk</a>, in particular it’s <code>word_tokenize</code> function:</p>
+<pre class="jupyterpython"><code>&gt;&gt;&gt; from nltk import tokenize
+&gt;&gt;&gt; text = &#39;&quot;Nice door&quot;, he said.&#39;
+&gt;&gt;&gt; tokenize.word_tokenize(text)
+[&#39;``&#39;, &#39;Nice&#39;, &#39;door&#39;, &#39;&quot;&#39;, &#39;,&#39;, &#39;he&#39;, &#39;said&#39;]</code></pre>
+<p>It appeared that this does keep some punctuation in the words, so I did some manual postprocessing:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>words <span class="op">=</span> tokenize.word_tokenize(text)</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Remove punctuation in tokens, as ntlk tokenizes for example &quot;they&#39;ll&quot; as</span></span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="co"># [they, &#39;ll]. The resulting &quot;ll&quot; will be ditched in a later stage.</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Also removes tokens that are just quotes, which turn into empty tokens,</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="co"># removed at the MIN_WORD_LEN stage below.</span></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>words <span class="op">=</span> (w.strip(<span class="st">&quot;&#39;.-`</span><span class="ch">\&quot;</span><span class="st">&quot;</span>) <span class="cf">for</span> w <span class="kw">in</span> words)</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Ditches some genitives and third person singulars. In Python 3.9 this</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a><span class="co"># should be `removesuffix` but the `replace` works well enough in this context.</span></span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>words <span class="op">=</span> (w.replace(<span class="st">&quot;&#39;s&quot;</span>, <span class="st">&#39;&#39;</span>) <span class="cf">for</span> w <span class="kw">in</span> words)</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Removes abbreviations such as &quot;e.g.&quot;</span></span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a>words <span class="op">=</span> (w <span class="cf">for</span> w <span class="kw">in</span> words <span class="cf">if</span> <span class="st">&#39;.&#39;</span> <span class="kw">not</span> <span class="kw">in</span> w)</span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Removes most punctuation from the list, such as &quot;,&quot;, &quot;:&quot;, etc.,</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a><span class="co"># also removes empty tokens.</span></span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a>MIN_WORD_LEN <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>words <span class="op">=</span> (w <span class="cf">for</span> w <span class="kw">in</span> words <span class="cf">if</span> <span class="bu">len</span>(w) <span class="op">&gt;</span> MIN_WORD_LEN)</span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Removes all numbers</span></span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a>words <span class="op">=</span> (w <span class="cf">for</span> w <span class="kw">in</span> words <span class="cf">if</span> w <span class="kw">and</span> <span class="kw">not</span> <span class="bu">all</span>(c.isdigit() <span class="cf">for</span> c <span class="kw">in</span> w))</span></code></pre></div>
+<p>The resulting list of words was then lemmatized with <code>WordNetLeammanizer</code>, which turns, for example, <code>houses</code> into <code>house</code>. The lemmanizer requires the caller to specify whether the word is an adjective, adverb, verb or noun. Depending on this type, a word might be lemmanized differently. I decided to just try all types for all words, and keep the lemmanized forms if they are in the dictionary:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co"># First turn our list of words into a dictionary mapping words to how</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="co"># often they appear.</span></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>word_counts <span class="op">=</span> collections.Counter(words)</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>word_dict <span class="op">=</span> ...  <span class="co"># New Oxford American Dictionary as parsed above.</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>lemma <span class="op">=</span> WordNetLemmatizer()</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>word_counts_lemmad <span class="op">=</span> collections.defaultdict(<span class="bu">int</span>)</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> w, count <span class="kw">in</span> word_counts.items():</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>  <span class="co"># The possible lemmanized forms of the word `w`.</span></span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>  possible_words <span class="op">=</span> <span class="bu">set</span>()</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> t <span class="kw">in</span> wordnet.POS_LIST:  <span class="co"># where POS_LIST == [ADJ, ADV, VERB, NOUN]</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>    w_lemmad <span class="op">=</span> lemma.lemmatize(w, pos<span class="op">=</span>t)</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> w_lemmad <span class="op">!=</span> w:</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>      possible_words.add(w_lemmad)</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> <span class="kw">not</span> possible_words:  <span class="co"># No lemmanized form found, assume word itself.</span></span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>    possible_words <span class="op">=</span> {w}</span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> possible_w <span class="kw">in</span> possible_words:</span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> possible_w <span class="kw">in</span> word_dict:</span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a>      word_counts_lemmad[possible_w] <span class="op">+=</span> count</span></code></pre></div>
+<p>I assume that there are better ways to process the text, and nltk seems to have many more powerful functions, but the above code worked reasonably well for my purpose. The full preprocessing code can be found in <a href="https://github.com/fab-jul/parse_dictionaries/blob/main/extract.py">extract.py</a>.</p>
+<p>Exploring the output, I realized a significant number of terms in the input text was not found in the dictionary. For example, the noun <code>vitals</code> was not found in the dictionary, as it hides in the definition of the adjective <code>vital</code>, and <code>vitals</code> is not lemmatized during preprocessing as the only valid base form is the noun <code>vitals</code>. Thus, the above pre-processing will skip <code>vitals</code>, as it’s not in the <code>word_dict</code>. Looking at the entry for the term <code>vital</code>, we see:</p>
+<pre><code>vi·tal | ˈvīdl |
+adjective
+    1 absolutely necessary or important; essential : secrecy is of vital importance | it is vital that the system is regularly maintained .
+    • indispensable to the continuance of life : the vital organs .
+    2 full of energy; lively : a beautiful, vital girl .
+    3 archaic fatal : the wound is vital .
+
+noun ( vitals )
+    the body&#39;s important internal organs, especially the gut or the genitalia : he felt the familiar knot contract in his vitals .
+    • short for vital signs.</code></pre>
+<p>In the second definition, we find the term <code>vitals</code>. Looking at the XML, we see:</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode xml"><code class="sourceCode xml"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>&lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;x_xdh&quot;</span>&gt;</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  &lt;<span class="kw">span</span><span class="ot"> role=</span><span class="st">&quot;text&quot;</span><span class="ot"> class=</span><span class="st">&quot;posg&quot;</span>&gt;</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>    &lt;<span class="kw">span</span><span class="ot"> d:pos=</span><span class="st">&quot;2&quot;</span><span class="ot"> class=</span><span class="st">&quot;pos&quot;</span>&gt;</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>      &lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;gp tg_pos&quot;</span>&gt;noun &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>      &lt;<span class="kw">d:pos</span>/&gt;</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>  &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>  &lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;fg&quot;</span>&gt;</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    &lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;gp tg_fg&quot;</span>&gt;(&lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    &lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;f&quot;</span>&gt;vitals&lt;/<span class="kw">span</span>&gt;  <span class="co">&lt;!-- the desired term! --&gt;</span></span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>    &lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;gp tg_fg&quot;</span>&gt;) &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>  &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>&lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>&lt;<span class="kw">span</span><span class="ot"> id=</span><span class="st">&quot;m_en_gbus1132680.014&quot;</span><span class="ot"> class=</span><span class="st">&quot;msDict x_xd1 t_core&quot;</span>&gt;</span>
+<span id="cb20-15"><a href="#cb20-15" aria-hidden="true" tabindex="-1"></a>  &lt;<span class="kw">span</span><span class="ot"> d:def=</span><span class="st">&quot;2&quot;</span><span class="ot"> role=</span><span class="st">&quot;text&quot;</span><span class="ot"> class=</span><span class="st">&quot;df&quot;</span>&gt;the body&#39;s important internal organs, especially the gut or the genitalia&lt;<span class="kw">d:def</span>/&gt;&lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-16"><a href="#cb20-16" aria-hidden="true" tabindex="-1"></a>  &lt;<span class="kw">span</span><span class="ot"> role=</span><span class="st">&quot;text&quot;</span><span class="ot"> class=</span><span class="st">&quot;gp tg_df&quot;</span>&gt;: &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-17"><a href="#cb20-17" aria-hidden="true" tabindex="-1"></a>  &lt;<span class="kw">span</span><span class="ot"> role=</span><span class="st">&quot;text&quot;</span><span class="ot"> class=</span><span class="st">&quot;eg&quot;</span>&gt;</span>
+<span id="cb20-18"><a href="#cb20-18" aria-hidden="true" tabindex="-1"></a>    &lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;ex&quot;</span>&gt; he felt the familiar knot contract in his vitals&lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-19"><a href="#cb20-19" aria-hidden="true" tabindex="-1"></a>    &lt;<span class="kw">span</span><span class="ot"> class=</span><span class="st">&quot;gp tg_eg&quot;</span>&gt;. &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-20"><a href="#cb20-20" aria-hidden="true" tabindex="-1"></a>  &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-21"><a href="#cb20-21" aria-hidden="true" tabindex="-1"></a>  &lt;<span class="kw">span</span><span class="ot"> role=</span><span class="st">&quot;text&quot;</span><span class="ot"> class=</span><span class="st">&quot;gp tg_msDict&quot;</span>&gt; &lt;/<span class="kw">span</span>&gt;</span>
+<span id="cb20-22"><a href="#cb20-22" aria-hidden="true" tabindex="-1"></a>&lt;/<span class="kw">span</span>&gt;</span></code></pre></div>
+<p>I created the following XPath to locate these terms</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>XPATH_OTHER_WORDS <span class="op">=</span> <span class="st">&#39;//span[@class=&quot;fg&quot;]/span[@class=&quot;f&quot;]&#39;</span></span></code></pre></div>
+<p>Trying the XPath on all definitions seemed to uncover a lot of additional terms. Mostly, these are plurals or phrasal verbs (the definition of <code>act</code> contains <code>act on</code>, <code>act for</code>, etc.), but this helped find some words in my input text.</p>
+<p>On a side note, I learned during this project that Chrome has a really great way to test XPath queries (while writing I realized Safari actually also has this). Right Click -&gt; “Inspect”, CMD+F, note the search bar at the bottom of the window:</p>
+<p><img class="col three" src="{{ site.baseurl }}/assets/img/xpath_chrome.png"></p>
+<p>You can even select XML elements and Right Click -&gt; Copy -&gt; XPath to extract a somewhat verbose XPath.</p>
+<p>Going back to the definitions, I wrote a second XPath to get derivative definitions. It turns out a lot of terms hide there, in particular adverbs, but also a lot of derived nouns. An example entry with useful derivatives:</p>
+<pre><code>snoop | sno͞op | informal
+verb [no object]
+    investigate or look around furtively [...]
+noun [in singular]
+    a furtive investigation [...]
+
+DERIVATIVES
+    snooper | ˈsno͞opər | noun
+    snoopy adjective</code></pre>
+<p>Overall, this allowed me to find most words in my input text. The remaining terms were mostly names or book-specific jargon.</p>
+<h3 id="getting-it-onto-the-apple-watch">Getting it onto the Apple Watch</h3>
+<p>I wanted to look at these entries on the Watch. Sadly, it turns out there is no <code>UIWebView</code> (used to render HTML in iOS) in WatchKit. But, <code>NSAttributedString</code> can be constructed from a HTML string. As it turns out, it can even contain CSS, as long as the CSS is inlined in the HTML as a <code>&lt;style&gt;</code> element in the header.</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode swift"><code class="sourceCode swift"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="kw">let</span> <span class="va">HTML_ENTRY_START</span> <span class="op">=</span> <span class="st">&quot;&quot;&quot;</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="st"> &lt;html lang=&quot;en&quot;&gt;</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="st"> &lt;head&gt;</span></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="st">   &lt;meta charset=&quot;utf-8&quot;&gt;</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a><span class="st">   &lt;title&gt;Words&lt;/title&gt;</span></span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a><span class="st">   &lt;style&gt;</span></span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a><span class="st">      ... Full DefaultStyle.css file here ...</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a><span class="st">   &lt;/style&gt;</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a><span class="st">  &lt;/head&gt;</span></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a><span class="st">  &lt;body&gt;</span></span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a><span class="st">&quot;&quot;&quot;</span></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a><span class="kw">let</span> <span class="va">HTML_ENTRY_END</span> <span class="op">=</span> <span class="st">&quot;&lt;/body&gt;&quot;</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a><span class="kw">let</span> <span class="va">definition</span><span class="op">:</span> String <span class="op">=</span> <span class="op">...</span> <span class="co">// The XML</span></span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a><span class="kw">let</span> <span class="va">htmlDefinition</span> <span class="op">=</span> HTML_ENTRY_START <span class="op">+</span> definition <span class="op">+</span> HTML_ENTRY_END</span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a><span class="kw">let</span> <span class="va">data</span> <span class="op">=</span> htmlDefinition<span class="op">.</span>data<span class="op">(</span>using<span class="op">:</span> <span class="op">.</span>utf8<span class="op">)!</span></span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a><span class="kw">let</span> <span class="va">attributedDefinition</span> <span class="op">=</span> <span class="cf">try</span> NSAttributedString<span class="op">(</span></span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a>    data<span class="op">:</span> data<span class="op">,</span></span>
+<span id="cb23-19"><a href="#cb23-19" aria-hidden="true" tabindex="-1"></a>    options<span class="op">:</span> <span class="op">[.</span>documentType<span class="op">:</span> NSAttributedString<span class="op">.</span>DocumentType<span class="op">.</span>html<span class="op">],</span></span>
+<span id="cb23-20"><a href="#cb23-20" aria-hidden="true" tabindex="-1"></a>    documentAttributes<span class="op">:</span> <span class="kw">nil</span><span class="op">)</span></span>
+<span id="cb23-21"><a href="#cb23-21" aria-hidden="true" tabindex="-1"></a>outputLabel<span class="op">.</span>setAttributedText<span class="op">(</span>attributedDefinition<span class="op">)</span></span></code></pre></div>
+<h3 id="conclusion">Conclusion</h3>
+<p>This was a fun little exercise in reverse engineering. I’m not sure I would have gone through this had I not found the gist and seen <code>import zlib</code>, as before that, the file looked very daunting. However, seeing that import statement gave the necessary energy to just push a bit further, and the rest was mostly a breeze.</p>
