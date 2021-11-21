@@ -1,14 +1,14 @@
 Vue.component('publication', {
     props: ['pub'],
     template: `
-        <div class="row mt-1">
+        <div class="row mt-4">
             <div class="col">
               <div>
-                <span class="fs-4 fst-bolder">{{ pub.title }} </span>
+                <span class="fs-5 fw-bolder">{{ pub.title }} </span>
                     <a :href="pub.pdfURL">PDF</a> 
                     <a v-if="pub.pageURL !== null" :href="pub.pageURL">Demo</a> 
               </div>
-              <div class="fst-bolder">{{ pub.authors }}</div>
+              <div >{{ pub.authors }}</div>
               <div class="fst-italic">
                 <span>{{ pub.conference }}</span>
                 <span v-if="pub.oral">(Oral)</span>
