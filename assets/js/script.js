@@ -5,8 +5,8 @@ Vue.component('publication', {
             <div class="col">
               <div>
                 <span class="fs-5 fw-bolder">{{ pub.title }} </span>
-                    <a :href="pub.pdfURL">PDF</a> 
-                    <a v-if="pub.pageURL !== null" :href="pub.pageURL">Demo</a> 
+                    <a v-if="pub.pageURL !== null" :href="pub.pageURL"><strong>Demo</strong></a>
+                    <a :href="pub.pdfURL">arXiv</a>
               </div>
               <div >{{ pub.authors }}</div>
               <div class="fst-italic">
@@ -52,7 +52,7 @@ class Publication {
 
 const PUBLICATIONS = [
     new Publication(
-        "Towards Generative Video Compression",
+        "Neural Video Compression using GANs for Detail Synthesis and Propagation",
         "Mentzer*, Fabian, Agustsson*, Eirikur, Ballé, Johannes, Minnen, David, Johnston, Nick, and Toderici, George",
         "2021",
         "https://arxiv.org/abs/2107.12038",
@@ -61,7 +61,7 @@ const PUBLICATIONS = [
         "High-Fidelity Generative Image Compression",
         "Mentzer, Fabian, Toderici, George, Tschannen, Michael, and Agustsson, Eirikur",
         "NeurIPS 2020",
-        "https://arxiv.org/abs/2107.12038",
+        "https://arxiv.org/abs/2006.09965",
         pageURL="https://hific.github.io",
         oral=true,
     ),
