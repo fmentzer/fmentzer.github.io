@@ -52,6 +52,12 @@ class Publication {
 
 const PUBLICATIONS = [
     new Publication(
+        "VCT: A Video Compression Transformer",
+        "Mentzer, Fabian, George Toderici, David Minnen, Sung-Jin Hwang, Sergi Caelles, Mario Lucic, and Eirikur Agustsson",
+        "2022",
+        "https://arxiv.org/abs/2206.07307",
+    ),
+    new Publication(
         "Neural Video Compression using GANs for Detail Synthesis and Propagation",
         "Mentzer*, Fabian, Agustsson*, Eirikur, Ballé, Johannes, Minnen, David, Johnston, Nick, and Toderici, George",
         "2021",
