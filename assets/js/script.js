@@ -60,7 +60,7 @@ const PUBLICATIONS = [
     new Publication(
         "VCT: A Video Compression Transformer",
         "Fabian Mentzer, George Toderici, David Minnen, Sung-Jin Hwang, Sergi Caelles, Mario Lucic, and Eirikur Agustsson",
-        "2022",
+        "NeurIPS 2022",
         "https://arxiv.org/abs/2206.07307",
     ),
     new Publication(
