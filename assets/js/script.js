@@ -54,7 +54,7 @@ const PUBLICATIONS = [
     new Publication(
         "Multi-Realism Image Compression with a Conditional Generator",
         "Eirikur Agustsson, David Minnen, George Toderici, Fabian Mentzer",
-        "2022",
+        "CVPR 2023",
         "https://arxiv.org/abs/2212.13824",
     ),
     new Publication(
