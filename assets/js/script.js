@@ -52,6 +52,12 @@ class Publication {
 
 const PUBLICATIONS = [
     new Publication(
+        "M2T: Masking Transformers Twice for Faster Decoding",
+        "Fabian Mentzer, Eirikur Agustsson, Michael Tschannen",
+        "preprint",
+        "https://arxiv.org/abs/2304.07313",
+    ),
+    new Publication(
         "Multi-Realism Image Compression with a Conditional Generator",
         "Eirikur Agustsson, David Minnen, George Toderici, Fabian Mentzer",
         "CVPR 2023",
@@ -60,7 +66,7 @@ const PUBLICATIONS = [
     new Publication(
         "Lossy Compression with Gaussian Diffusion",
         "Lucas Theis, Tim Salimans, Matthew D. Hoffman, Fabian Mentzer",
-        "2022",
+        "preprint",
         "https://arxiv.org/abs/2206.08889",
     ),
     new Publication(
