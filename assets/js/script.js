@@ -52,6 +52,12 @@ class Publication {
 
 const PUBLICATIONS = [
     new Publication(
+        "High-Fidelity Image Compression with Score-based Generative Models",
+        "Emiel Hoogeboom, Eirikur Agustsson, Fabian Mentzer, Luca Versari, George Toderici, Lucas Theis",
+        "preprint",
+        "https://arxiv.org/abs/2305.18231",
+    ),
+    new Publication(
         "M2T: Masking Transformers Twice for Faster Decoding",
         "Fabian Mentzer, Eirikur Agustsson, Michael Tschannen",
         "preprint",
