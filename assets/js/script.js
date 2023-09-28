@@ -52,9 +52,15 @@ class Publication {
 
 const PUBLICATIONS = [
     new Publication(
+        "Finite Scalar Quantization: VQ-VAE Made Simple",
+        "Fabian Mentzer, David Minnen, Eirikur Agustsson, Michael Tschannen",
+        "preprint (2023)",
+        "https://arxiv.org/abs/2309.15505",
+    ),
+    new Publication(
         "High-Fidelity Image Compression with Score-based Generative Models",
         "Emiel Hoogeboom, Eirikur Agustsson, Fabian Mentzer, Luca Versari, George Toderici, Lucas Theis",
-        "preprint",
+        "preprint (2023)",
         "https://arxiv.org/abs/2305.18231",
     ),
     new Publication(
@@ -72,7 +78,7 @@ const PUBLICATIONS = [
     new Publication(
         "Lossy Compression with Gaussian Diffusion",
         "Lucas Theis, Tim Salimans, Matthew D. Hoffman, Fabian Mentzer",
-        "preprint",
+        "ArXiv (2022)",
         "https://arxiv.org/abs/2206.08889",
     ),
     new Publication(
