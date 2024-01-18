@@ -60,7 +60,7 @@ const PUBLICATIONS = [
     new Publication(
         "Finite Scalar Quantization: VQ-VAE Made Simple",
         "Fabian Mentzer, David Minnen, Eirikur Agustsson, Michael Tschannen",
-        "preprint (2023)",
+        "ICLR 2024",
         "https://arxiv.org/abs/2309.15505",
     ),
     new Publication(
