@@ -60,7 +60,7 @@ const PUBLICATIONS = [
         new Publication(
         "GIVT: Generative Infinite-Vocabulary Transformers",
         "Michael Tschannen, Cian Eastwood, Fabian Mentzer",
-        "preprint (2023)",
+        "ECCV 2024",
         "https://arxiv.org/abs/2312.02116",
         ),
     new Publication(
