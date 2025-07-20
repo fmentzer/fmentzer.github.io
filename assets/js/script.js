@@ -52,12 +52,18 @@ class Publication {
 
 const PUBLICATIONS = [
     new Publication(
+        "Gemini 2.5: Pushing the Frontier with Advanced Reasoning, Multimodality, Long Context, and Next Generation Agentic Capabilities",
+        "Gemini Team",
+        "arxiv (2025)",
+        "https://arxiv.org/abs/2507.06261",
+        ),
+    new Publication(
         "Gemini 1.5: Unlocking multimodal understanding across millions of tokens of context",
         "Gemini Team",
         "arxiv (2024)",
         "https://arxiv.org/abs/2403.05530",
         ),
-        new Publication(
+    new Publication(
         "GIVT: Generative Infinite-Vocabulary Transformers",
         "Michael Tschannen, Cian Eastwood, Fabian Mentzer",
         "ECCV 2024",
